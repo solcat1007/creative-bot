@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Creative Bot · 创意项目合集</title>
+<style>
+:root {
+  --bg: #f0fdfa; --surface: #fff; --primary: #06b6d4; --primary-dark: #0e7490;
+  --text: #164e63; --muted: #67a3b0; --border: #cffafe;
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: var(--bg); font-family: var(--font); color: var(--text); min-height: 100vh; }
+.container { max-width: 960px; margin: 0 auto; padding: 40px 20px; }
+h1 { font-size: 28px; margin-bottom: 8px; }
+.subtitle { color: var(--muted); margin-bottom: 32px; font-size: 15px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
+.card {
+  display: block; text-decoration: none; color: inherit;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+  padding: 20px; transition: all 0.25s ease;
+}
+.card:hover { border-color: var(--primary); box-shadow: 0 8px 24px rgba(6,182,212,0.12); transform: translateY(-2px); }
+.card-title { font-size: 17px; font-weight: 600; margin-bottom: 6px; color: var(--primary-dark); }
+.card-desc { font-size: 13px; color: var(--muted); line-height: 1.6; margin-bottom: 12px; }
+.card-link { font-size: 13px; color: var(--primary); font-weight: 500; }
+.footer { text-align: center; margin-top: 40px; color: var(--muted); font-size: 13px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>Creative Bot</h1>
+  <p class="subtitle">GitHub Actions 驱动的自动化创意项目生成器 · 每日更新 · 纯 Canvas 零依赖</p>
+  <div class="grid">
+        <a href="projects/wave-interference/index.html" class="card">
+          <div class="card-title">波之干涉</div>
+          <div class="card-desc">双源波纹干涉模拟 | 实时渲染 | 参数可调 | 纯Canvas零依赖</div>
+          <div class="card-link">wave-interference →</div>
+        </a>
+        <a href="projects/sand-castle/index.html" class="card">
+          <div class="card-title">沙之城堡</div>
+          <div class="card-desc">元胞自动机沙子模拟 | 落沙物理 | 障碍物绘制 | 纯Canvas零依赖</div>
+          <div class="card-link">sand-castle →</div>
+        </a>
+  </div>
+  <div class="footer">Powered by GitHub Actions · 2 projects generated</div>
+</div>
+</body>
+</html>

@@ -1,0 +1,79 @@
+#!/usr/bin/env python3
+"""Update the index.html that lists all generated projects."""
+import os
+import json
+from pathlib import Path
+
+def main():
+    projects_dir = Path(__file__).parent / "projects"
+    manifest_path = Path(__file__).parent / "manifest.json"
+
+    # Read manifest
+    if manifest_path.exists():
+        with open(manifest_path, "r", encoding="utf-8") as f:
+            manifest = json.load(f)
+    else:
+        manifest = {"created": []}
+
+    # Generate index.html
+    projects_html = ""
+    for p in manifest.get("created", []):
+        name = p["name"]
+        title = p.get("title", name)
+        desc = p.get("desc", "")
+        projects_html += f"""
+        <a href="projects/{name}/index.html" class="card">
+          <div class="card-title">{title}</div>
+          <div class="card-desc">{desc}</div>
+          <div class="card-link">{name} →</div>
+        </a>"""
+
+    html = f"""<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Creative Bot · 创意项目合集</title>
+<style>
+:root {{
+  --bg: #f0fdfa; --surface: #fff; --primary: #06b6d4; --primary-dark: #0e7490;
+  --text: #164e63; --muted: #67a3b0; --border: #cffafe;
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif;
+}}
+* {{ margin: 0; padding: 0; box-sizing: border-box; }}
+body {{ background: var(--bg); font-family: var(--font); color: var(--text); min-height: 100vh; }}
+.container {{ max-width: 960px; margin: 0 auto; padding: 40px 20px; }}
+h1 {{ font-size: 28px; margin-bottom: 8px; }}
+.subtitle {{ color: var(--muted); margin-bottom: 32px; font-size: 15px; }}
+.grid {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }}
+.card {{
+  display: block; text-decoration: none; color: inherit;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+  padding: 20px; transition: all 0.25s ease;
+}}
+.card:hover {{ border-color: var(--primary); box-shadow: 0 8px 24px rgba(6,182,212,0.12); transform: translateY(-2px); }}
+.card-title {{ font-size: 17px; font-weight: 600; margin-bottom: 6px; color: var(--primary-dark); }}
+.card-desc {{ font-size: 13px; color: var(--muted); line-height: 1.6; margin-bottom: 12px; }}
+.card-link {{ font-size: 13px; color: var(--primary); font-weight: 500; }}
+.footer {{ text-align: center; margin-top: 40px; color: var(--muted); font-size: 13px; }}
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>Creative Bot</h1>
+  <p class="subtitle">GitHub Actions 驱动的自动化创意项目生成器 · 每日更新 · 纯 Canvas 零依赖</p>
+  <div class="grid">{projects_html}
+  </div>
+  <div class="footer">Powered by GitHub Actions · {len(manifest.get("created", []))} projects generated</div>
+</div>
+</body>
+</html>"""
+
+    index_path = Path(__file__).parent / "index.html"
+    with open(index_path, "w", encoding="utf-8") as f:
+        f.write(html)
+    print(f"Index updated with {len(manifest.get('created', []))} projects")
+
+
+if __name__ == "__main__":
+    main()
