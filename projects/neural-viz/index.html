@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>神经网络可视化</title>
+<style>
+:root {
+  --bg: #f0fdfa;
+  --surface: #ffffff;
+  --primary: #8b5cf6;
+  --primary-light: #67e8f9;
+  --primary-dark: #0e7490;
+  --text: #164e63;
+  --text-muted: #67a3b0;
+  --border: #cffafe;
+  --shadow: 0 1px 3px rgba(6,182,212,0.08);
+  --shadow-lg: 0 10px 30px rgba(6,182,212,0.12);
+  --radius: 12px;
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { height: 100%; overflow: hidden; }
+body { background: var(--bg); font-family: var(--font); color: var(--text); }
+#canvas { display: block; cursor: crosshair; }
+
+.topbar {
+  position: fixed; top: 16px; left: 50%; transform: translateX(-50%);
+  display: flex; gap: 0; background: var(--surface); border: 1px solid var(--border);
+  border-radius: 999px; box-shadow: var(--shadow-lg); padding: 4px; z-index: 100;
+}
+.mode-btn {
+  border: none; background: transparent; padding: 8px 18px;
+  border-radius: 999px; font-size: 13px; cursor: pointer;
+  color: var(--text-muted); font-family: var(--font); font-weight: 500;
+  transition: all 0.25s ease; white-space: nowrap;
+}
+.mode-btn:hover { color: var(--primary); }
+.mode-btn.active { background: var(--primary); color: white; }
+
+.panel {
+  position: fixed; top: 80px; right: 16px; width: 240px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); box-shadow: var(--shadow-lg);
+  padding: 20px; z-index: 100; max-height: calc(100vh - 110px);
+  overflow-y: auto; transition: transform 0.3s ease;
+}
+.panel.collapsed { transform: translateX(270px); }
+.panel-toggle {
+  position: fixed; top: 80px; right: 16px; z-index: 101;
+  width: 36px; height: 36px; border: 1px solid var(--border);
+  background: var(--surface); border-radius: 50%; box-shadow: var(--shadow);
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  font-size: 14px; color: var(--primary); transition: all 0.3s ease;
+}
+.panel-toggle.shifted { right: 276px; }
+.panel h3 { font-size: 11px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--text-muted); margin-bottom: 12px; }
+.panel-section { margin-bottom: 20px; }
+.panel-section:last-child { margin-bottom: 0; }
+.slider-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.slider-label { font-size: 12px; color: var(--text); min-width: 60px; }
+.slider-value { font-size: 11px; color: var(--primary); min-width: 36px; text-align: right; font-variant-numeric: tabular-nums; }
+input[type="range"] { flex: 1; -webkit-appearance: none; appearance: none; height: 4px; background: var(--border); border-radius: 2px; outline: none; }
+input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 14px; height: 14px; background: var(--primary); border-radius: 50%; cursor: pointer; }
+input[type="range"]::-moz-range-thumb { width: 14px; height: 14px; background: var(--primary); border-radius: 50%; cursor: pointer; border: none; }
+.action-btn {
+  width: 100%; padding: 8px; border: 1px solid var(--border);
+  background: var(--surface); border-radius: 8px; font-size: 12px;
+  cursor: pointer; color: var(--text); font-family: var(--font); transition: all 0.2s; margin-bottom: 6px;
+}
+.action-btn:hover { border-color: var(--primary); color: var(--primary); }
+.action-btn.primary { background: var(--primary); color: white; border-color: var(--primary); }
+.action-btn.primary:hover { background: var(--primary-dark); }
+.hint {
+  position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+  font-size: 12px; color: var(--text-muted); z-index: 100;
+  background: var(--surface); padding: 8px 20px; border-radius: 999px;
+  box-shadow: var(--shadow); border: 1px solid var(--border);
+  animation: fadeIn 0.5s ease 0.3s both;
+}
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+.stats {
+  position: fixed; bottom: 24px; left: 16px; z-index: 100;
+  font-size: 11px; color: var(--text-muted); font-variant-numeric: tabular-nums;
+  background: var(--surface); padding: 6px 12px; border-radius: 8px;
+  box-shadow: var(--shadow); border: 1px solid var(--border);
+}
+@media (max-width: 600px) {
+  .panel { width: calc(100vw - 32px); }
+  .panel-toggle.shifted { right: calc(100vw - 52px); }
+  .mode-btn { padding: 6px 12px; font-size: 11px; }
+}
+</style>
+</head>
+<body>
+<canvas id="canvas"></canvas>
+<div class="topbar">
+  <button class="mode-btn active" data-mode="forward">前向传播</button>
+  <button class="mode-btn" data-mode="train">训练</button>
+</div>
+<button class="panel-toggle" id="panelToggle">☰</button>
+<div class="panel" id="panel">
+  <div class="panel-section">
+    <h3>网络参数</h3>
+    <div class="slider-row"><span class="slider-label">隐藏层</span><input type="range" id="speedSlider" min="2" max="8" step="1" value="4"><span class="slider-value" id="speedVal">4</span></div>
+    <div class="slider-row"><span class="slider-label">每层节点</span><input type="range" id="dampSlider" min="3" max="12" step="1" value="6"><span class="slider-value" id="dampVal">6</span></div>
+    <div class="slider-row"><span class="slider-label">学习率</span><input type="range" id="widthSlider" min="0.01" max="1" step="0.01" value="0.3"><span class="slider-value" id="widthVal">0.30</span></div>
+    <div class="slider-row"><span class="slider-label">线宽</span><input type="range" id="spacingSlider" min="0.5" max="3" step="0.1" value="1"><span class="slider-value" id="spacingVal">1.0</span></div>
+  </div>
+  <div class="panel-section">
+    <h3>操作</h3>
+    <button class="action-btn primary" id="clearBtn">重置网络</button>
+    <button class="action-btn" id="saveBtn">保存PNG</button>
+  </div>
+</div>
+<div class="hint" id="hint">点击输入层节点激活 · 切换训练模式</div>
+<div class="stats" id="stats">Layers: 0 | FPS: 0</div>
+<script>
+let layers = [];
+let weights = [];
+let activations = [];
+
+function buildNetwork() {
+  const numHidden = Math.floor(params.speed);
+  const nodesPerLayer = Math.floor(params.damping);
+  layers = [2]; // 2 inputs
+  for (let i = 0; i < numHidden; i++) layers.push(nodesPerLayer);
+  layers.push(1); // 1 output
+
+  // Init weights
+  weights = [];
+  for (let l = 0; l < layers.length - 1; l++) {
+    const layerW = [];
+    for (let j = 0; j < layers[l+1]; j++) {
+      const row = [];
+      for (let k = 0; k < layers[l]; k++) {
+        row.push((Math.random() - 0.5) * 2);
+      }
+      layerW.push(row);
+    }
+    weights.push(layerW);
+  }
+  activations = layers.map(n => new Array(n).fill(0));
+  // Random input
+  activations[0] = [Math.random(), Math.random()];
+  forward();
+}
+
+function sigmoid(x) { return 1 / (1 + Math.exp(-x)); }
+
+function forward() {
+  for (let l = 0; l < layers.length - 1; l++) {
+    for (let j = 0; j < layers[l+1]; j++) {
+      let sum = 0;
+      for (let k = 0; k < layers[l]; k++) {
+        sum += activations[l][k] * weights[l][j][k];
+      }
+      activations[l+1][j] = sigmoid(sum);
+    }
+  }
+}
+
+buildNetwork();
+
+function onModeChange(m) { currentMode = m; }
+function onDown(x,y) {
+  // Click input node to toggle
+  const positions = getNodePositions();
+  for (let i = 0; i < positions[0].length; i++) {
+    const p = positions[0][i];
+    if (Math.sqrt((p.x-x)**2 + (p.y-y)**2) < 20) {
+      activations[0][i] = activations[0][i] > 0.5 ? 0 : 1;
+      forward();
+      hintEl.style.opacity = '0';
+      break;
+    }
+  }
+}
+
+function getNodePositions() {
+  const w = window.innerWidth, h = window.innerHeight;
+  const margin = 100;
+  const layerSpacing = (w - margin * 2) / (layers.length - 1);
+  const positions = layers.map((count, l) => {
+    const x = margin + l * layerSpacing;
+    const nodeSpacing = Math.min(60, (h - 200) / count);
+    const startY = h/2 - (count - 1) * nodeSpacing / 2;
+    const arr = [];
+    for (let i = 0; i < count; i++) {
+      arr.push({ x, y: startY + i * nodeSpacing });
+    }
+    return arr;
+  });
+  return positions;
+}
+
+function update(dt) {
+  if (currentMode === 'train') {
+    // Train XOR
+    const inputs = [[0,0],[0,1],[1,0],[1,1]];
+    const targets = [0, 1, 1, 0];
+    const idx = Math.floor(Math.random() * 4);
+    activations[0] = inputs[idx].slice();
+    forward();
+    // Backprop simplified
+    const lr = params.lineWidth;
+    const outputError = activations[layers.length-1][0] - targets[idx];
+    // Update last layer weights
+    const l = layers.length - 2;
+    for (let j = 0; j < layers[l+1]; j++) {
+      for (let k = 0; k < layers[l]; k++) {
+        weights[l][j][k] -= lr * outputError * activations[l][k] * activations[l+1][j] * (1 - activations[l+1][j]);
+      }
+    }
+  }
+  // Slowly decay activations for visual effect
+  for (let l = 1; l < layers.length; l++) {
+    for (let i = 0; i < layers[l]; i++) {
+      // Keep showing current forward pass
+    }
+  }
+}
+
+function render() {
+  ctx.fillStyle = theme.bg;
+  ctx.fillRect(0, 0, window.innerWidth, window.innerHeight);
+
+  const positions = getNodePositions();
+
+  // Draw connections
+  for (let l = 0; l < layers.length - 1; l++) {
+    for (let j = 0; j < layers[l+1]; j++) {
+      for (let k = 0; k < layers[l]; k++) {
+        const w = weights[l][j][k];
+        const alpha = Math.min(1, Math.abs(w) * 0.5);
+        ctx.beginPath();
+        ctx.strokeStyle = w > 0 ? `rgba(139, 92, 246, ${alpha})` : `rgba(236, 72, 153, ${alpha})`;
+        ctx.lineWidth = params.spacing * Math.min(3, Math.abs(w));
+        ctx.moveTo(positions[l][k].x, positions[l][k].y);
+        ctx.lineTo(positions[l+1][j].x, positions[l+1][j].y);
+        ctx.stroke();
+      }
+    }
+  }
+
+  // Draw nodes
+  for (let l = 0; l < layers.length; l++) {
+    for (let i = 0; i < layers[l]; i++) {
+      const p = positions[l][i];
+      const a = activations[l][i];
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 12 + a * 6, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(139, 92, 246, ${a * 0.8 + 0.1})`;
+      ctx.fill();
+      ctx.strokeStyle = '#8b5cf6';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      // Activation value
+      ctx.fillStyle = '#fff';
+      ctx.font = '10px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(a.toFixed(2), p.x, p.y);
+    }
+  }
+
+  // Layer labels
+  ctx.font = '11px sans-serif';
+  ctx.fillStyle = '#67a3b0';
+  ctx.textAlign = 'center';
+  positions.forEach((_, l) => {
+    const x = positions[0][0].x + l * (positions[1][0].x - positions[0][0].x || 0);
+  });
+
+  if (statsEl) statsEl.textContent = `Layers: ${layers.length} | Output: ${activations[layers.length-1][0]?.toFixed(3) || 0} | FPS: ${fps}`;
+}
+</script>
+
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d', { alpha: false });
+let W, H;
+function resize() {
+  const dpr = window.devicePixelRatio || 1;
+  W = canvas.width = window.innerWidth * dpr;
+  H = canvas.height = window.innerHeight * dpr;
+  canvas.style.width = window.innerWidth + 'px';
+  canvas.style.height = window.innerHeight + 'px';
+  ctx.scale(dpr, dpr);
+  ctx.fillStyle = '#f0fdfa';
+  ctx.fillRect(0, 0, window.innerWidth, window.innerHeight);
+}
+window.addEventListener('resize', resize);
+
+const theme = { primary: '#06b6d4', light: '#67e8f9', dark: '#0e7490', bg: '#f0fdfa' };
+let params = { speed: 1.5, damping: 1.2, maxRadius: 300, lineWidth: 1.5, spacing: 30 };
+let currentMode = 'default';
+let particles = [];
+let mouse = { x: 0, y: 0, down: false };
+
+canvas.addEventListener('mousedown', e => { mouse.down = true; mouse.x = e.clientX; mouse.y = e.clientY; onDown(e.clientX, e.clientY); });
+canvas.addEventListener('mousemove', e => { mouse.x = e.clientX; mouse.y = e.clientY; onMove(e.clientX, e.clientY); });
+canvas.addEventListener('mouseup', () => { mouse.down = false; onUp(); });
+canvas.addEventListener('mouseleave', () => { mouse.down = false; });
+canvas.addEventListener('touchstart', e => { e.preventDefault(); const t = e.touches[0]; mouse.down = true; mouse.x = t.clientX; mouse.y = t.clientY; onDown(t.clientX, t.clientY); }, {passive:false});
+canvas.addEventListener('touchmove', e => { e.preventDefault(); const t = e.touches[0]; mouse.x = t.clientX; mouse.y = t.clientY; onMove(t.clientX, t.clientY); }, {passive:false});
+canvas.addEventListener('touchend', () => { mouse.down = false; onUp(); });
+
+document.querySelectorAll('.mode-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentMode = btn.dataset.mode;
+    onModeChange(currentMode);
+  });
+});
+
+const sliders = [
+  ['speedSlider','speedVal','speed'], ['dampSlider','dampVal','damping'],
+  ['radiusSlider','radiusVal','maxRadius'], ['widthSlider','widthVal','lineWidth'],
+  ['spacingSlider','spacingVal','spacing'],
+];
+sliders.forEach(([sId,vId,key]) => {
+  const s = document.getElementById(sId), v = document.getElementById(vId);
+  if (s) s.addEventListener('input', () => { params[key] = parseFloat(s.value); v.textContent = s.value; });
+});
+
+document.getElementById('clearBtn')?.addEventListener('click', clearCanvas);
+document.getElementById('saveBtn')?.addEventListener('click', saveImage);
+
+function clearCanvas() { particles = []; ctx.fillStyle = theme.bg; ctx.fillRect(0,0,window.innerWidth,window.innerHeight); }
+function saveImage() { const l = document.createElement('a'); l.download = 'art-' + Date.now() + '.png'; l.href = canvas.toDataURL('image/png'); l.click(); }
+
+document.addEventListener('keydown', e => {
+  if (e.key === ' ') { e.preventDefault(); clearCanvas(); }
+  if (e.key === 's' || e.key === 'S') saveImage();
+  if (e.key === 'h' || e.key === 'H') document.getElementById('panelToggle')?.click();
+});
+
+const panel = document.getElementById('panel');
+const panelToggle = document.getElementById('panelToggle');
+panelToggle?.addEventListener('click', () => {
+  const open = !panel.classList.contains('collapsed');
+  panel.classList.toggle('collapsed', open);
+  panelToggle.classList.toggle('shifted', !open);
+  panelToggle.textContent = open ? '☰' : '⚙';
+});
+if (panelToggle) { panelToggle.classList.add('shifted'); panelToggle.textContent = '☰'; }
+
+let lastTime = performance.now(), frameCount = 0, fpsTime = 0, fps = 0;
+const statsEl = document.getElementById('stats');
+const hintEl = document.getElementById('hint');
+
+function loop(now) {
+  const dt = Math.min((now - lastTime) / 1000, 0.05);
+  lastTime = now;
+  ctx.fillStyle = theme.bg; ctx.globalAlpha = 0.06; ctx.fillRect(0,0,window.innerWidth,window.innerHeight); ctx.globalAlpha = 1;
+  update(dt);
+  render();
+  frameCount++; fpsTime += dt;
+  if (fpsTime > 0.5) { fps = Math.round(frameCount/fpsTime); frameCount = 0; fpsTime = 0; if(statsEl) statsEl.textContent = `Particles: ${particles.length} | FPS: ${fps}`; }
+  requestAnimationFrame(loop);
+}
+
+// === To be overridden by each template ===
+function onDown(x,y) {}
+function onMove(x,y) {}
+function onUp() {}
+function onModeChange(m) {}
+function update(dt) {}
+function render() {}
+buildNetwork();
+resize();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
