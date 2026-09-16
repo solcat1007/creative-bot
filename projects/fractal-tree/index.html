@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>分形之树</title>
+<style>
+:root {
+  --bg: #f0fdfa;
+  --surface: #ffffff;
+  --primary: #f59e0b;
+  --primary-light: #67e8f9;
+  --primary-dark: #0e7490;
+  --text: #164e63;
+  --text-muted: #67a3b0;
+  --border: #cffafe;
+  --shadow: 0 1px 3px rgba(6,182,212,0.08);
+  --shadow-lg: 0 10px 30px rgba(6,182,212,0.12);
+  --radius: 12px;
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { height: 100%; overflow: hidden; }
+body { background: var(--bg); font-family: var(--font); color: var(--text); }
+#canvas { display: block; cursor: crosshair; }
+
+.topbar {
+  position: fixed; top: 16px; left: 50%; transform: translateX(-50%);
+  display: flex; gap: 0; background: var(--surface); border: 1px solid var(--border);
+  border-radius: 999px; box-shadow: var(--shadow-lg); padding: 4px; z-index: 100;
+}
+.mode-btn {
+  border: none; background: transparent; padding: 8px 18px;
+  border-radius: 999px; font-size: 13px; cursor: pointer;
+  color: var(--text-muted); font-family: var(--font); font-weight: 500;
+  transition: all 0.25s ease; white-space: nowrap;
+}
+.mode-btn:hover { color: var(--primary); }
+.mode-btn.active { background: var(--primary); color: white; }
+
+.panel {
+  position: fixed; top: 80px; right: 16px; width: 240px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); box-shadow: var(--shadow-lg);
+  padding: 20px; z-index: 100; max-height: calc(100vh - 110px);
+  overflow-y: auto; transition: transform 0.3s ease;
+}
+.panel.collapsed { transform: translateX(270px); }
+.panel-toggle {
+  position: fixed; top: 80px; right: 16px; z-index: 101;
+  width: 36px; height: 36px; border: 1px solid var(--border);
+  background: var(--surface); border-radius: 50%; box-shadow: var(--shadow);
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  font-size: 14px; color: var(--primary); transition: all 0.3s ease;
+}
+.panel-toggle.shifted { right: 276px; }
+.panel h3 { font-size: 11px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--text-muted); margin-bottom: 12px; }
+.panel-section { margin-bottom: 20px; }
+.panel-section:last-child { margin-bottom: 0; }
+.slider-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.slider-label { font-size: 12px; color: var(--text); min-width: 60px; }
+.slider-value { font-size: 11px; color: var(--primary); min-width: 36px; text-align: right; font-variant-numeric: tabular-nums; }
+input[type="range"] { flex: 1; -webkit-appearance: none; appearance: none; height: 4px; background: var(--border); border-radius: 2px; outline: none; }
+input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 14px; height: 14px; background: var(--primary); border-radius: 50%; cursor: pointer; }
+input[type="range"]::-moz-range-thumb { width: 14px; height: 14px; background: var(--primary); border-radius: 50%; cursor: pointer; border: none; }
+.action-btn {
+  width: 100%; padding: 8px; border: 1px solid var(--border);
+  background: var(--surface); border-radius: 8px; font-size: 12px;
+  cursor: pointer; color: var(--text); font-family: var(--font); transition: all 0.2s; margin-bottom: 6px;
+}
+.action-btn:hover { border-color: var(--primary); color: var(--primary); }
+.action-btn.primary { background: var(--primary); color: white; border-color: var(--primary); }
+.action-btn.primary:hover { background: var(--primary-dark); }
+.hint {
+  position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+  font-size: 12px; color: var(--text-muted); z-index: 100;
+  background: var(--surface); padding: 8px 20px; border-radius: 999px;
+  box-shadow: var(--shadow); border: 1px solid var(--border);
+  animation: fadeIn 0.5s ease 0.3s both;
+}
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+.stats {
+  position: fixed; bottom: 24px; left: 16px; z-index: 100;
+  font-size: 11px; color: var(--text-muted); font-variant-numeric: tabular-nums;
+  background: var(--surface); padding: 6px 12px; border-radius: 8px;
+  box-shadow: var(--shadow); border: 1px solid var(--border);
+}
+@media (max-width: 600px) {
+  .panel { width: calc(100vw - 32px); }
+  .panel-toggle.shifted { right: calc(100vw - 52px); }
+  .mode-btn { padding: 6px 12px; font-size: 11px; }
+}
+</style>
+</head>
+<body>
+<canvas id="canvas"></canvas>
+<div class="topbar">
+  <button class="mode-btn active" data-mode="tree">树木</button>
+  <button class="mode-btn" data-mode="fern">蕨叶</button>
+  <button class="mode-btn" data-mode="dragon">龙曲线</button>
+  <button class="mode-btn" data-mode="sierpinski">谢氏</button>
+</div>
+<button class="panel-toggle" id="panelToggle">☰</button>
+<div class="panel" id="panel">
+  <div class="panel-section">
+    <h3>分形参数</h3>
+    <div class="slider-row"><span class="slider-label">深度</span><input type="range" id="speedSlider" min="3" max="12" step="1" value="8"><span class="slider-value" id="speedVal">8</span></div>
+    <div class="slider-row"><span class="slider-label">角度</span><input type="range" id="dampSlider" min="10" max="60" step="1" value="25"><span class="slider-value" id="dampVal">25</span></div>
+    <div class="slider-row"><span class="slider-label">线宽</span><input type="range" id="widthSlider" min="0.5" max="5" step="0.1" value="2"><span class="slider-value" id="widthVal">2.0</span></div>
+    <div class="slider-row"><span class="slider-label">缩放</span><input type="range" id="spacingSlider" min="0.5" max="0.8" step="0.01" value="0.7"><span class="slider-value" id="spacingVal">0.70</span></div>
+  </div>
+  <div class="panel-section">
+    <h3>操作</h3>
+    <button class="action-btn primary" id="clearBtn">重绘</button>
+    <button class="action-btn" id="saveBtn">保存PNG</button>
+  </div>
+</div>
+<div class="hint" id="hint">移动鼠标改变风向 · 点击重绘</div>
+<div class="stats" id="stats">Depth: 0 | FPS: 0</div>
+<script>
+let windAngle = 0;
+
+function onMove(x,y) {
+  windAngle = (x / window.innerWidth - 0.5) * 0.3;
+  redraw();
+}
+
+function onModeChange(m) { currentMode = m; redraw(); }
+
+function onDown(x,y) { redraw(); }
+
+function redraw() {
+  ctx.fillStyle = theme.bg;
+  ctx.fillRect(0,0,window.innerWidth,window.innerHeight);
+  const depth = Math.floor(params.speed);
+  const angle = params.damping * Math.PI / 180;
+  const w = params.lineWidth;
+  const scale = params.spacing;
+
+  if (currentMode === 'tree') {
+    drawTree(window.innerWidth/2, window.innerHeight - 50, -Math.PI/2 + windAngle, window.innerHeight * 0.25, depth, angle, scale, w);
+  } else if (currentMode === 'fern') {
+    drawFern(window.innerWidth/2, window.innerHeight - 20, depth, scale, w);
+  } else if (currentMode === 'dragon') {
+    drawDragon(depth);
+  } else if (currentMode === 'sierpinski') {
+    drawSierpinski(depth);
+  }
+  if (statsEl) statsEl.textContent = `Depth: ${depth} | FPS: ${fps}`;
+}
+
+function drawTree(x, y, angle, length, depth, branchAngle, scale, width) {
+  if (depth === 0 || length < 2) return;
+  const x2 = x + Math.cos(angle) * length;
+  const y2 = y + Math.sin(angle) * length;
+  ctx.beginPath();
+  ctx.strokeStyle = `hsl(${30 + depth * 15}, 70%, ${30 + depth * 5}%)`;
+  ctx.lineWidth = width * depth * 0.3;
+  ctx.moveTo(x, y);
+  ctx.lineTo(x2, y2);
+  ctx.stroke();
+  drawTree(x2, y2, angle - branchAngle + windAngle*0.3, length * scale, depth-1, branchAngle, scale, width);
+  drawTree(x2, y2, angle + branchAngle + windAngle*0.3, length * scale, depth-1, branchAngle, scale, width);
+}
+
+function drawFern(x, y, depth, scale, width) {
+  if (depth === 0) return;
+  const len = depth * 8;
+  ctx.beginPath();
+  ctx.strokeStyle = `hsl(${100 + depth * 10}, 60%, 40%)`;
+  ctx.lineWidth = width * depth * 0.2;
+  ctx.moveTo(x, y);
+  ctx.lineTo(x, y - len);
+  ctx.stroke();
+  drawFern(x, y - len, depth - 1, scale, width);
+  drawFern(x + len * 0.3, y - len * 0.7, depth - 2, scale, width);
+  drawFern(x - len * 0.3, y - len * 0.7, depth - 2, scale, width);
+}
+
+function drawDragon(depth) {
+  let s = 'FX';
+  const rules = { 'X':'X+YF+', 'Y':'-FX-Y' };
+  for (let i = 0; i < depth; i++) {
+    let ns = '';
+    for (const c of s) ns += rules[c] || c;
+    s = ns;
+  }
+  let x = window.innerWidth/2, y = window.innerHeight/2;
+  let angle = 0; const step = 5;
+  ctx.beginPath();
+  ctx.strokeStyle = '#f59e0b';
+  ctx.lineWidth = params.lineWidth;
+  ctx.moveTo(x, y);
+  for (const c of s) {
+    if (c === 'F') { x += Math.cos(angle)*step; y += Math.sin(angle)*step; ctx.lineTo(x,y); }
+    else if (c === '+') angle += Math.PI/2;
+    else if (c === '-') angle -= Math.PI/2;
+  }
+  ctx.stroke();
+}
+
+function drawSierpinski(depth) {
+  const size = Math.min(window.innerWidth, window.innerHeight) * 0.8;
+  const cx = window.innerWidth/2, cy = window.innerHeight/2;
+  const p1 = { x: cx, y: cy - size/2 };
+  const p2 = { x: cx - size/2, y: cy + size/2 };
+  const p3 = { x: cx + size/2, y: cy + size/2 };
+  drawTriangle(p1, p2, p3, depth);
+}
+
+function drawTriangle(a, b, c, depth) {
+  if (depth === 0) {
+    ctx.beginPath();
+    ctx.strokeStyle = `hsl(${30 + Math.random()*20}, 70%, 50%)`;
+    ctx.lineWidth = params.lineWidth;
+    ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.lineTo(c.x, c.y); ctx.closePath();
+    ctx.stroke();
+    return;
+  }
+  const ab = { x:(a.x+b.x)/2, y:(a.y+b.y)/2 };
+  const bc = { x:(b.x+c.x)/2, y:(b.y+c.y)/2 };
+  const ca = { x:(c.x+a.x)/2, y:(c.y+a.y)/2 };
+  drawTriangle(a, ab, ca, depth-1);
+  drawTriangle(ab, b, bc, depth-1);
+  drawTriangle(ca, bc, c, depth-1);
+}
+
+function update(dt) {}
+function render() {}
+</script>
+
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d', { alpha: false });
+let W, H;
+function resize() {
+  const dpr = window.devicePixelRatio || 1;
+  W = canvas.width = window.innerWidth * dpr;
+  H = canvas.height = window.innerHeight * dpr;
+  canvas.style.width = window.innerWidth + 'px';
+  canvas.style.height = window.innerHeight + 'px';
+  ctx.scale(dpr, dpr);
+  ctx.fillStyle = '#f0fdfa';
+  ctx.fillRect(0, 0, window.innerWidth, window.innerHeight);
+}
+window.addEventListener('resize', resize);
+
+const theme = { primary: '#06b6d4', light: '#67e8f9', dark: '#0e7490', bg: '#f0fdfa' };
+let params = { speed: 1.5, damping: 1.2, maxRadius: 300, lineWidth: 1.5, spacing: 30 };
+let currentMode = 'default';
+let particles = [];
+let mouse = { x: 0, y: 0, down: false };
+
+canvas.addEventListener('mousedown', e => { mouse.down = true; mouse.x = e.clientX; mouse.y = e.clientY; onDown(e.clientX, e.clientY); });
+canvas.addEventListener('mousemove', e => { mouse.x = e.clientX; mouse.y = e.clientY; onMove(e.clientX, e.clientY); });
+canvas.addEventListener('mouseup', () => { mouse.down = false; onUp(); });
+canvas.addEventListener('mouseleave', () => { mouse.down = false; });
+canvas.addEventListener('touchstart', e => { e.preventDefault(); const t = e.touches[0]; mouse.down = true; mouse.x = t.clientX; mouse.y = t.clientY; onDown(t.clientX, t.clientY); }, {passive:false});
+canvas.addEventListener('touchmove', e => { e.preventDefault(); const t = e.touches[0]; mouse.x = t.clientX; mouse.y = t.clientY; onMove(t.clientX, t.clientY); }, {passive:false});
+canvas.addEventListener('touchend', () => { mouse.down = false; onUp(); });
+
+document.querySelectorAll('.mode-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentMode = btn.dataset.mode;
+    onModeChange(currentMode);
+  });
+});
+
+const sliders = [
+  ['speedSlider','speedVal','speed'], ['dampSlider','dampVal','damping'],
+  ['radiusSlider','radiusVal','maxRadius'], ['widthSlider','widthVal','lineWidth'],
+  ['spacingSlider','spacingVal','spacing'],
+];
+sliders.forEach(([sId,vId,key]) => {
+  const s = document.getElementById(sId), v = document.getElementById(vId);
+  if (s) s.addEventListener('input', () => { params[key] = parseFloat(s.value); v.textContent = s.value; });
+});
+
+document.getElementById('clearBtn')?.addEventListener('click', clearCanvas);
+document.getElementById('saveBtn')?.addEventListener('click', saveImage);
+
+function clearCanvas() { particles = []; ctx.fillStyle = theme.bg; ctx.fillRect(0,0,window.innerWidth,window.innerHeight); }
+function saveImage() { const l = document.createElement('a'); l.download = 'art-' + Date.now() + '.png'; l.href = canvas.toDataURL('image/png'); l.click(); }
+
+document.addEventListener('keydown', e => {
+  if (e.key === ' ') { e.preventDefault(); clearCanvas(); }
+  if (e.key === 's' || e.key === 'S') saveImage();
+  if (e.key === 'h' || e.key === 'H') document.getElementById('panelToggle')?.click();
+});
+
+const panel = document.getElementById('panel');
+const panelToggle = document.getElementById('panelToggle');
+panelToggle?.addEventListener('click', () => {
+  const open = !panel.classList.contains('collapsed');
+  panel.classList.toggle('collapsed', open);
+  panelToggle.classList.toggle('shifted', !open);
+  panelToggle.textContent = open ? '☰' : '⚙';
+});
+if (panelToggle) { panelToggle.classList.add('shifted'); panelToggle.textContent = '☰'; }
+
+let lastTime = performance.now(), frameCount = 0, fpsTime = 0, fps = 0;
+const statsEl = document.getElementById('stats');
+const hintEl = document.getElementById('hint');
+
+function loop(now) {
+  const dt = Math.min((now - lastTime) / 1000, 0.05);
+  lastTime = now;
+  ctx.fillStyle = theme.bg; ctx.globalAlpha = 0.06; ctx.fillRect(0,0,window.innerWidth,window.innerHeight); ctx.globalAlpha = 1;
+  update(dt);
+  render();
+  frameCount++; fpsTime += dt;
+  if (fpsTime > 0.5) { fps = Math.round(frameCount/fpsTime); frameCount = 0; fpsTime = 0; if(statsEl) statsEl.textContent = `Particles: ${particles.length} | FPS: ${fps}`; }
+  requestAnimationFrame(loop);
+}
+
+// === To be overridden by each template ===
+function onDown(x,y) {}
+function onMove(x,y) {}
+function onUp() {}
+function onModeChange(m) {}
+function update(dt) {}
+function render() {}
+redraw();
+resize();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
